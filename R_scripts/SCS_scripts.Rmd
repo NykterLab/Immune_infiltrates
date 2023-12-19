@@ -1,0 +1,247 @@
+---
+title: "Immune_infiltrates_SCS"
+output: html_document
+date: "2023-12-19"
+---
+
+## Prefilter the data for inferCNV, Richards et al. as example.
+
+```{r preprocess}
+library('Seurat')
+
+df <- read.csv('path/to/Richards_NatureCancer_GBM_scRNAseq_counts.csv.gz')
+
+rownames(df) <- df[,1]
+df = subset(df, select = -c(X) )
+sparse_matrix <- Matrix::Matrix(as.matrix(df))
+
+seurat_object <- CreateSeuratObject(sparse_matrix, project = 'Richards', min.cells = 3, min.features = 200) 
+seurat_object
+
+seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT-")
+seurat_object <- subset(seurat_object, subset = percent.mt < 5)
+counts_matrix = as.data.frame(GetAssayData(seurat_object, slot="counts"))
+
+write.csv(counts_matrix, file = 'path/to/Richards_GBM_scRNAseq_counts_filttered.csv', quote = F, sep = '\t')
+
+```
+
+
+## inferCNV analysis for Neftel et al., Slyper et al. and Richards et al.
+# Neftel et al. as example below
+
+```{r infercnv}
+library('infercnv')
+library('Matrix')
+
+df <- read.csv('/path/to/Neftel_filttered_counts.csv')
+rownames(df) <- df[,1]
+df <- subset(df, select = -c(X))
+
+celltypes <- read.table('/path/to/Neftel_filttered_celltypes.csv', sep = '\t')
+
+rownames(celltypes) <- celltypes$V1
+colnames(df) <- celltypes$V1
+celltypes <- subset(celltypes, select = -c(V1))
+
+genepos <- read.table('/path/to/gene_postion.txt')
+
+rownames(genepos) <- genepos$V1; genepos <- genepos[,2:4]
+
+infercnv_obj <- CreateInfercnvObject(raw_counts_matrix=df, annotations_file=celltypes, gene_order_file=genepos, ref_group_names=NULL) 
+
+# cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+infercnv_obj <- infercnv::run(infercnv_obj, cutoff=0.1, out_dir='/path/to/infercnv_results/Neftel_filttered_k10', denoise=TRUE, HMM=TRUE, k_obs_groups = 10, window_length = 301)
+
+# save results
+
+```
+
+## Harmony integration
+
+```{r SCS_harmony_integration}
+#Merge filtered Seurat-objects which have been filttered out of CNV-cells.
+#normalize and identify variable features for each dataset independently
+
+seurat_object_harmony <- merge(seurat_object_Slyper, y = c(seurat_object1_Antunes, seurat_object2_Antunes, seurat_object_Neftel, seurat_object_Richards), add.cell.ids = c("GSE140", 
+"GSE163_1", "GSE163_2", "GSE131", 'Richards'), project = "Harmony_scRNA_set")
+
+seurat_object_harmony[["percent.mt"]] <- PercentageFeatureSet(seurat_object_harmony, pattern = "^MT-") 
+
+seurat_object_harmony <- subset(seurat_object_harmony, subset = percent.mt < 5) 
+seurat_object_harmony <- NormalizeData(seurat_object_harmony, verbose = F)
+seurat_object_harmony <- FindVariableFeatures(seurat_object_harmony, selection.method = "vst", nfeatures = 2000, verbose = F)
+
+seurat_object_harmony <- ScaleData(seurat_object_harmony, verbose = F)
+seurat_object_harmony <- RunPCA(seurat_object_harmony, npcs = 30, verbose = F)
+seurat_object_harmony <- RunHarmony(seurat_object_harmony, group.by.vars = "orig.ident")
+
+# save reuslts
+
+```
+
+## SCS data clustering and dimensionality reductions
+
+```{r SCS_clustering}
+library('dplyr')
+library('Seurat')
+set.seed(42)
+immune.combined.harmony <- readRDS('/path/to/Harmony_result')
+
+ElbowPlot(immune.combined.harmony, ndims = 50)
+
+immune.combined.harmony <- RunUMAP(immune.combined.harmony, reduction = "harmony", dims = 1:30)
+immune.combined.harmony <- RunTSNE(immune.combined.harmony, reduction = 'harmony', dims = 1:30)
+immune.combined.harmony <- FindNeighbors(immune.combined.harmony, reduction = "harmony", dims = 1:30)
+
+library(clustree)
+set.seed(42)
+resolutions <- c(0.5, 0.8, 1.0, 1.25, 1.5, 1.75, 2, 2.5)
+DefaultAssay(immune.combined.harmony) <- "RNA" 
+
+
+for (i in resolutions) {
+ immune.combined.harmony <- FindClusters(immune.combined.harmony, resolution = i)
+ show(DimPlot(immune.combined.harmony, reduction = "tsne", label = TRUE))
+}
+
+clustree(immune.combined.harmony, prefix = "RNA_snn_res.")
+immune.combined.harmony <- FindClusters(immune.combined.harmony, resolution = 2.5)
+show(DimPlot(immune.combined.harmony, reduction = "tsne", label = TRUE))
+
+
+# cell cycle calculation
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+immune.combined.harmony <- CellCycleScoring(immune.combined.harmony, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+immune.combined.harmony <- RunPCA(immune.combined.harmony, features = c(s.genes, g2m.genes))
+
+# save and visualize results
+
+```
+
+
+## DE gene analysis using MAST and clusterprofiler ORA, upregulated CD3+ myeloid and CD4+ T-cells as example
+
+```{r DE_and_ORA}
+# Find differentially expressed features between CD3+ myeloid cells and CD4+ T-cells
+cd3_CD4.de.markers <- FindMarkers(immune.combined.harmony, ident.1 = "CD3+ myeloids", ident.2 = 'CD4+ T-cells', logfc.threshold = 0.5, test.use = 'MAST')
+
+## ORA
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(dplyr)
+
+cd3_CD4 <- read.csv('path/to/DE_genes_CD3myel_CD4Tcells.csv')
+bg <- read.csv('path/to/backround_genes.csv')
+
+temp <- which(cd3_CD4$avg_log2FC < -0.5)
+df <- cd3_CD4[temp,]
+
+# we want the log2 fold change 
+original_gene_list <- df$avg_log2FC
+
+# name the vector
+names(original_gene_list) <- df$X
+
+# omit any NA values 
+gene_list<-na.omit(original_gene_list)
+
+# sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+
+# Exctract significant results (padj < 0.05)
+sig_genes_df = subset(df, p_val_adj < 0.05)
+
+# From significant results, we want to filter on log2fold change
+genes <- sig_genes_df$avg_log2FC
+
+# Name the vector
+names(genes) <- sig_genes_df$X
+
+# omit NA values
+genes <- na.omit(genes)
+
+# # filter on min log2fold change (log2FoldChange > 2)
+# genes <- names(genes)[abs(genes) > 2]
+
+
+go_enrich <- enrichGO(gene = names(genes),
+                      universe = bg$x,
+                      OrgDb = 'org.Hs.eg.db', 
+                      keyType = 'SYMBOL',
+                      readable = T,
+                      ont = "BP",
+                      pvalueCutoff = 0.05,
+                      pAdjustMethod = "BH",
+                      qvalueCutoff = 0.05)
+
+go_enrich <- dropGO(go_enrich, level = 1)
+go_enrich <- dropGO(go_enrich, level = 2)
+
+res <- simplify(go_enrich, cutoff = 0.5)
+
+dotplot(res, showCategory = 10, title = "CD3+ Myeloids vs. CD4+ T-cells, upregulated DE genes")
+
+df_genes <- as.data.frame(res@result$geneID)
+
+# save and visualize result
+
+```
+
+## Average expression from celltypes
+
+```{r averg_exp}
+library(Seurat)
+
+immune.combined.harmony <- readRDS('/path/to/seurat_object')
+
+df <- read.csv('path/to/immune_cluster_genes_cluster1.csv')
+agv_expressions_clust1 <- AverageExpression(object = immune.combined.harmony, group.by = 'celltypes', features = cluster1_genes)
+
+# save result
+
+```
+
+## Immune cluster binarization and clustering
+
+```{r ic_binarization_cluster}
+library(stats)
+library(dplyr)
+library(Seurat)
+
+df <- read.csv('path/to/average_expressions_cluster1.csv')
+
+# get row mean for each gene to use as limit of expression
+RMs <- rowMeans(df) + 0.5*(apply(df, 1, sd, na.rm=TRUE))
+
+# prepare binarized dataframe
+df_bin <- df
+
+# find out celltype with biggest expression
+df$max <- apply(df, 1, max, na.rm=TRUE)
+df$max_celltype <- colnames(df)[apply(df,1,which.max)]
+
+# binarize table
+for (ct in colnames(df_bin)){
+
+  # binarize table
+  df_bin[,ct] <- df_bin[,ct] > RMs
+  df_bin[,ct] <- as.integer(as.logical(df_bin[,ct]))
+}
+
+res <- hclust(dist(df_bin[,1:19]))
+plot(res)
+
+cut_res <- cutree(res, k=2)
+
+plot(res)
+rect.hclust(res , k = 2)
+
+final_df_bin <- mutate(df_bin, cluster = cut_res)
+
+# save and visualize result
+
+```
+
+

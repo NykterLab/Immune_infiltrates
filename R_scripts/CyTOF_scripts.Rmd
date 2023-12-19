@@ -1,0 +1,333 @@
+---
+title: "CyTOF_scripts"
+output: html_document
+date: "2023-12-19"
+---
+
+## Myeloid clustering
+
+```{r myeloid_panel_clustering}
+
+cytofAsinh <- function(value, cofactor = 5) { 
+  value <- value-1 
+  loID <- which(value < 0) 
+  if(length(loID) > 0) 
+    value[loID] <- rnorm(length(loID), mean = 0, sd = 0.01) 
+  value <- value / cofactor 
+  value <- asinh(value) # value <- log(value + sqrt(value^2 + 1)) 
+  return(value) 
+}
+
+library(flowCore, lib.loc = '/path/to/packages/')
+library(cytofkit, lib.loc = '/path/to/packages/')
+library(uwot)
+library(dplyr)
+library(RColorBrewer)
+
+#Myeloid glioma panel
+Myeloid_ZH688 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH688.fcs", transformation = FALSE)
+Myeloid_ZH729 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH729.fcs", transformation = FALSE)
+Myeloid_ZH678 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH678.fcs", transformation = FALSE)
+Myeloid_ZH720 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH720.fcs", transformation = FALSE)
+Myeloid_ZH736 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH736.fcs", transformation = FALSE)
+Myeloid_ZH961 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH961.fcs", transformation = FALSE)
+Myeloid_ZH789 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH789.fcs", transformation = FALSE)
+Myeloid_ZH746 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH746.fcs", transformation = FALSE)
+Myeloid_ZH761 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH761.fcs", transformation = FALSE)
+Myeloid_ZH784 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH784.fcs", transformation = FALSE)
+Myeloid_ZH791 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH791.fcs", transformation = FALSE)
+Myeloid_ZH794 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH794.fcs", transformation = FALSE)
+Myeloid_ZH802 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH802.fcs", transformation = FALSE)
+Myeloid_ZH810 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH810.fcs", transformation = FALSE)
+Myeloid_ZH816 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH816.fcs", transformation = FALSE)
+Myeloid_ZH818 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH818.fcs", transformation = FALSE)
+Myeloid_ZH813 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH813.fcs", transformation = FALSE)
+Myeloid_ZH822 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH822.fcs", transformation = FALSE)
+
+#BrM panel
+Myeloid_ZH962 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH962.fcs", transformation = FALSE)
+Myeloid_ZH780 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH780.fcs", transformation = FALSE)
+Myeloid_ZH795 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH795.fcs", transformation = FALSE)
+Myeloid_ZH800 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH800.fcs", transformation = FALSE)
+Myeloid_ZH965 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH965.fcs", transformation = FALSE)
+Myeloid_ZH744 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH744.fcs", transformation = FALSE)
+Myeloid_ZH782 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH782.fcs", transformation = FALSE)
+Myeloid_ZH756 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH756.fcs", transformation = FALSE)
+
+#Epilepsy sample
+Myeloid_ZH963 <- read.FCS("/path/to/Mass Cytometry data; Myeloid panel/Myeloid_ZH963.fcs", transformation = FALSE)
+
+
+list_myel <- c(Myeloid_ZH962, Myeloid_ZH780, Myeloid_ZH795, Myeloid_ZH800, Myeloid_ZH965, Myeloid_ZH744, Myeloid_ZH782, Myeloid_ZH756, Myeloid_ZH688, Myeloid_ZH729, Myeloid_ZH678, Myeloid_ZH720, Myeloid_ZH736, Myeloid_ZH961, Myeloid_ZH789, Myeloid_ZH746, Myeloid_ZH761, Myeloid_ZH784, Myeloid_ZH791, Myeloid_ZH794, Myeloid_ZH802, Myeloid_ZH810, Myeloid_ZH816, Myeloid_ZH818, Myeloid_ZH813, Myeloid_ZH822, Myeloid_ZH963)
+sample_name_myel <- c('Myeloid_ZH962', 'Myeloid_ZH780', 'Myeloid_ZH795', 'Myeloid_ZH800', 'Myeloid_ZH965', 'Myeloid_ZH744', 'Myeloid_ZH782', 'Myeloid_ZH756', 'Myeloid_ZH688', 'Myeloid_ZH729', 'Myeloid_ZH678', 'Myeloid_ZH720', 'Myeloid_ZH736', 'Myeloid_ZH961', 'Myeloid_ZH789', 'Myeloid_ZH746', 'Myeloid_ZH761', 'Myeloid_ZH784', 'Myeloid_ZH791', 'Myeloid_ZH794', 'Myeloid_ZH802', 'Myeloid_ZH810', 'Myeloid_ZH816', 'Myeloid_ZH818', 'Myeloid_ZH813', 'Myeloid_ZH822', 'Myeloid_ZH963')
+sample_type <- c('BRM', 'BRM', 'BRM', 'BRM', 'BRM', 'BRM', 'BRM', 'BRM', 'Anaplastic astrocytoma', 'Anaplastic astrocytoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Diffuse astrocytoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Anaplastic oligodendroglioma', 'Epilepsy')
+sample_type_specific <- c('Endometrium carcinoma BrM', 'Melanoma BrM', 'Melanoma BrM', 'Melanoma BrM', 'NSCLC BrM', 'NSCLC BrM', 'NSCLC BrM', 'Squamous cell carcinoma BrM', 'Anaplastic astrocytoma IDH1-MUT', 'Anaplastic astrocytoma IDH1-WT', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma recurrent', 'Diffuse astrocytoma IDH1-WT', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma recurrent', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Glioblastoma', 'Anaplastic oligodendroglioma IDH1-MUT', 'Epilepsy')
+
+filtered_list_myel <- list()
+
+set.seed(1)
+
+for (i in 1:length(unique(list_myel))) {
+
+  d <- list_myel[[i]]
+  
+  channels <- c("Y89Di", "Nd142Di", "Nd144Di", "Nd145Di", "Nd146Di", "Sm147Di", "Eu151Di", "Sm152Di", "Eu153Di", "Gd155Di", "Gd156Di", "Gd158Di", "Tb159Di", "Gd160Di", "Dy163Di", "Ho165Di", "Er168Di", "Er170Di", "Yb171Di", "Yb173Di", "Yb176Di", "Bi209Di", "Nd143Di")
+  
+  translist <- transformList(channels, cytofAsinh)
+  
+  dataTransform <- transform(d, translist)
+  
+  data_test_mass <- data.frame(dataTransform@exprs)
+  
+  #random samples
+  if (dim(data_test_mass)[[1]] > 500000) {
+  data_test_mass <- data_test_mass[sample(nrow(data_test_mass), 500000), ]
+  }
+  data_test_mass <- data_test_mass[,channels]
+  data_test_mass$sample_name <- sample_name_myel[[i]]
+  data_test_mass$sample_type <- sample_type[[i]]
+  data_test_mass$sample_type_specific <- sample_type_specific[[i]]
+  
+  filtered_list_myel[[i]] <- data_test_mass
+  
+}
+
+myel_samples_df <- Reduce(rbind, filtered_list_myel)
+
+data_test_mass <- myel_samples_df[,channels]
+
+pca_myel_all_samples <- prcomp(data_test_mass, scale. = TRUE, center = TRUE)
+
+
+umap_myel_all_samples <- umap(data_test_mass, n_neighbors = 60, metric = 'euclidean', min_dist = 0.25)
+save.image('/path/to/umap_myel_AS_noCD45neg.RData')
+
+clusters_myel_all_samples <- cytof_cluster(xdata = data_test_mass, method = 'Rphenograph', Rphenograph_k = 60)
+save.image('/path/to/clustered_myel_AS_noCD45neg.RData')
+
+
+
+```
+
+## Lymphoid clustering
+
+```{r lymphoid_panel_clustering}
+cytofAsinh <- function(value, cofactor = 5) { 
+  value <- value-1 
+  loID <- which(value < 0) 
+  if(length(loID) > 0) 
+    value[loID] <- rnorm(length(loID), mean = 0, sd = 0.01) 
+  value <- value / cofactor 
+  value <- asinh(value) # value <- log(value + sqrt(value^2 + 1)) 
+  return(value) 
+}
+
+library(flowCore, lib.loc = '/path/to/packages/')
+library(cytofkit, lib.loc = '/path/to/packages/')
+library(uwot)
+library(dplyr)
+library(RColorBrewer)
+
+
+#Glioma panel 2
+Lymphoid_ZH808 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH808.fcs", transformation = FALSE)
+Lymphoid_ZH822 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH822.fcs", transformation = FALSE)
+Lymphoid_ZH750 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH750.fcs", transformation = FALSE)
+Lymphoid_ZH753 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH753.fcs", transformation = FALSE)
+Lymphoid_ZH784 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH784.fcs", transformation = FALSE)
+Lymphoid_ZH791 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH791.fcs", transformation = FALSE)
+Lymphoid_ZH794 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH794.fcs", transformation = FALSE)
+Lymphoid_ZH802 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH802.fcs", transformation = FALSE)
+Lymphoid_ZH818 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH818.fcs", transformation = FALSE)
+Lymphoid_ZH813 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH813.fcs", transformation = FALSE)
+
+#BrM panel 2
+Lymphoid_ZH780 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH780.fcs", transformation = FALSE)
+Lymphoid_ZH786 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH786.fcs", transformation = FALSE)
+Lymphoid_ZH795 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH795.fcs", transformation = FALSE)
+Lymphoid_ZH800 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH800.fcs", transformation = FALSE)
+Lymphoid_ZH809 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH809.fcs", transformation = FALSE)
+Lymphoid_ZH782 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH782.fcs", transformation = FALSE)
+Lymphoid_ZH785 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH785.fcs", transformation = FALSE)
+Lymphoid_ZH756 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH756.fcs", transformation = FALSE)
+
+#Epilepsy sample
+Lymphoid_ZH783 <- read.FCS("/path/to/Mass Cytometry data; Lymphoid panel/Lymphoid_ZH783.fcs", transformation = FALSE)
+
+
+
+list_lymph <- c(Lymphoid_ZH808, Lymphoid_ZH822, Lymphoid_ZH750, Lymphoid_ZH753, Lymphoid_ZH784, Lymphoid_ZH791, Lymphoid_ZH794, Lymphoid_ZH802, Lymphoid_ZH818, Lymphoid_ZH813, Lymphoid_ZH780, Lymphoid_ZH786, Lymphoid_ZH795, Lymphoid_ZH800, Lymphoid_ZH809, Lymphoid_ZH782, Lymphoid_ZH785, Lymphoid_ZH756, Lymphoid_ZH783)
+sample_name_lymph <- c('Lymphoid_ZH808', 'Lymphoid_ZH822', 'Lymphoid_ZH750', 'Lymphoid_ZH753', 'Lymphoid_ZH784', 'Lymphoid_ZH791', 'Lymphoid_ZH794', 'Lymphoid_ZH802', 'Lymphoid_ZH818', 'Lymphoid_ZH813', 'Lymphoid_ZH780', 'Lymphoid_ZH786', 'Lymphoid_ZH795', 'Lymphoid_ZH800', 'Lymphoid_ZH809', 'Lymphoid_ZH782', 'Lymphoid_ZH785', 'Lymphoid_ZH756', 'Lymphoid_ZH783')
+filtered_list_lymph <- list()
+
+# col desc 195Pt_DEAD, deleted
+channels <- c("Nd142Di", 'Nd145Di', 'Nd146Di', 'Eu151Di', 'Sm152Di', 'Eu153Di', 'Sm154Di', 'Dy161Di', 'Dy162Di', 'Dy163Di', 'Dy164Di', 'Ho165Di', 'Er166Di', 'Yb172Di', 'Yb176Di', 'Bi209Di', 'Yb171Di', 'Sm149Di', 'Gd156Di', 'Yb174Di')
+
+for (i in 1:length(list_lymph)) {
+  
+  d <- list_lymph[[i]]
+  
+  translist <- transformList(channels, cytofAsinh)
+  
+  dataTransform <- transform(d, translist)
+  
+  data_test_mass <- data.frame(dataTransform@exprs)
+  data_test_mass <- data_test_mass[,colnames(data_test_mass) %in% channels]
+  
+  data_test_mass$sample_name <- sample_name_lymph[[i]]
+  
+  filtered_list_lymph[[i]] <- data_test_mass
+  
+}
+
+set.seed(1)
+
+lymph_samples_df <- Reduce(rbind, filtered_list_lymph)
+
+data_test_mass <- lymph_samples_df[,channels]
+
+pca_all_samples <- prcomp(data_test_mass, scale. = TRUE, center = TRUE)
+
+
+umap_all_samples <- umap(data_test_mass, n_neighbors = 60, metric = 'euclidean', min_dist = 0.25)
+save.image("/path/to/umap_lymph_all_samples_dead_rm.RData")
+
+clusters_all_samples <- cytof_cluster(xdata = data_test_mass, method = 'Rphenograph', Rphenograph_k = 60)
+save.image("/path/to/klusteroitu_lymph_all_samples_dead_rm.RData")
+
+```
+
+## Re-running UMAPs was done similarly for both lymphoid and myeloid, myeloid as example
+
+```{r UMAP_reclustering}
+## cerate a UMAP of cells labelled as non-other and non-out cells
+library(uwot)
+
+
+##Myel ALL SAMPLES 25.2.
+celltypes <- c("Dendritic cell", "Macrophage", "CD19+ Myeloid", "T cell", "out", "Dendritic cell", "Microglia", "Microglia", "Dendritic cell", "Microglia", "Dendritic cell", "T cell", "T cell", "out", "Dendritic cell", "Macrophage", "Macrophage", "NK cell", "Microglia", "Neutrophil", "NK cell", "Other", "T cell", "NK cell", "T cell", "Macrophage", "Other", "T cell", "out", "CD19+ Myeloid", "Other", "Microglia", "T cell", "T cell", "T cell", "Microglia", "B cell", "NK cell", "Other", "Dendritic cell", "B cell")
+
+
+# ##Lymph ALL SAMPLES 25.2.
+# celltypes <- c("NK cell", "Other cell", "NK cell", "Other cell", "Other cell", "NK cell", "out", "Other cell", "Other cell", "Other cell", "Other cell", "Other cell", "Other cell", "NK cell", "CD4 Treg cell", "Other cell", "CD4 T cell", "CD8 T cell", "Double-negative (gammadelta) T cell", "B cell", "CD8 T cell", "CD8 T cell", "CD8 T cell", "CD4 Treg cell", "CD8 T cell", "CD4 T cell", "Breg cell", "CD4 T cell", "NK cell", "Other cell", "Other cell", "CD4 T cell", "CD8 T cell", "Other cell", "out", "Other cell", "CD8 T cell", "Double-negative (gammadelta) T cell")
+
+library(data.table)
+df_myel_allsamples <- as.data.frame(fread('/path/to/Myeloid_AllSamples_processed_20062022.tsv.gz', sep = '\t'))
+df_myel_allsamples <- as.data.frame(subset(df_myel_allsamples, select = -c(V1)))
+
+df_lymph_allsamples <- as.data.frame(fread('/path/to/Lymphoid_AllSamples_processed_20062022.tsv.gz', sep = '\t'))
+df_lymph_allsamples <- as.data.frame(subset(df_lymph_allsamples, select = -c(V1)))
+
+cell_type <- c()
+
+for (i in 1:length(plot_df$clusters_all_samples)) {
+  n <- as.numeric(plot_df$clusters_all_samples[[i]])
+  cell_type[i] <- celltypes[n]
+  
+}
+
+plot_df$cell_type <- cell_type
+
+rows <- which(plot_df$cell_type != 'out' & plot_df$cell_type != "Other") # For Myeloid
+#rows <- which(plot_df$cell_type != 'out' & plot_df$cell_type != "Other cell") # For Lymphoid
+
+##SUBSETTING
+##Myeloid channels
+channels <- c("Y89Di", "Nd142Di", "Nd144Di", "Nd145Di", "Nd146Di", "Sm147Di", "Eu151Di", "Sm152Di", "Eu153Di", "Gd155Di", "Gd156Di", "Gd158Di", "Tb159Di", "Gd160Di", "Dy163Di", "Ho165Di", "Er168Di", "Er170Di", "Yb171Di", "Yb173Di", "Yb176Di", "Bi209Di", "Nd143Di")
+
+#Lymphoid channels 
+#channels <- c("Nd142Di", 'Nd145Di', 'Nd146Di', 'Eu151Di', 'Sm152Di', 'Eu153Di', 'Sm154Di', 'Dy161Di', 'Dy162Di', 'Dy163Di', 'Dy164Di', 'Ho165Di', 'Er166Di', 'Yb172Di', 'Yb176Di', 'Bi209Di', 'Yb171Di', 'Sm149Di', 'Gd156Di', 'Yb174Di')
+
+plot_df$cell_type <- as.factor(plot_df$cell_type)
+plot_df <- plot_df[rows,channels]
+
+umap_myel_all_samples <- umap(plot_df, n_neighbors = 45, metric = 'euclidean', min_dist = 0.25)
+save.image("/path/to/umap_Myel_AllSamples_no_other_0607.RData")
+
+```
+
+
+## Celltype percentage calculations
+
+```{r celltype_percentages}
+library(readr)
+library(data.table)
+
+df_myeloid_allsamples <- as.data.frame(fread('/path/to/Myeloid_AllSamples_processed_20062022.tsv.gz'))[,-1]
+#df_lymphoid_allsamples <- as.data.frame(fread('/path/to/Lymphoid_AllSamples_processed_20062022.tsv.gz'))[,-1]
+
+plot_df <- df_myeloid_allsamples
+
+## Celltypes per sample
+table2 <- as.data.frame(table(plot_df$sample_name, plot_df$cell_type))
+
+for (i in 1:length(table2$Var1)) {
+  
+  # sample percentage
+  n <- table2[i,1]
+  temp <- which(table2[,1] == n)
+  temp_sum <- sum(table2[temp,3])
+  table2[i,4] <- (table2[i,3]/temp_sum)*100
+  
+  # percentage from celltype
+  m <- table2[i,2]
+  temp <- which(table2[,2] == m)
+  temp_sum <- sum(table2[temp,3])
+  table2[i,5] <- (table2[i,3]/temp_sum)*100
+
+}
+
+colnames(table2) <- c('sample', 'cell_type', 'frequency', 'sample_percentage', 'cell_type_percentage')
+
+# visualizations after this
+
+```
+
+## Correlation calculation for celltype percentages
+
+```{r correlations}
+# make a data frame where celltypes are the columns and samples are rows out of 
+# the previously calculated percentages
+
+df <- as.data.frame(matrix(nrow = length(unique(table2$sample)), ncol=length(unique(table2$cell_type))))
+rownames(df) <- unique(table2$sample)
+colnames(df) <- unique(table2$cell_type)
+
+for (st in unique(table2$sample)) {
+  for (i in unique(table2$cell_type)) {
+    temp <- which(table2$sample==st & table2$cell_type==i)
+    df[st,i] <- table2[temp,6]
+  }
+}
+
+# calculate correlation for celltypes other than out and other
+res <- cor(df[,1:10], method = 'pearson') # select columns other than "out" and "Other"
+res <- round(res,2)
+
+# colors
+temp <- res
+temp[temp>0] <- 'dark red'
+temp[temp<=0] <- 'dark blue'
+
+
+library(gplots)
+
+my_palette <- colorRampPalette(c("blue", "white", "red"))(n = 299)
+heatmap_3 <- heatmap.2(res,
+  cellnote = res,  # same data set for cell labels
+  main = "Friebel Celltype correlation, CD45+ dropout considered, Pearson", # heat map title
+  notecol="black",      # change font color of cell labels to black
+  density.info="none",  # turns off density plot inside color legend
+  trace="none",         # turns off trace lines inside the heat map
+  margins =c(13,13),     # widens margins around plot
+  col=my_palette,       # use on color palette defined earlier
+  #breaks=col_breaks,    # enable color transition at specified limits
+  dendrogram="both",     # only draw a row dendrogram
+  Colv=T,               # T draws column dendrogram, set to F to turn off, causes warnings but works
+  keysize = 2,
+  Rowv = T)           # T draws row dendrogram, set to F to turn off, causes warnings but works
+
+show(heatmap_3)
+
+```
+
